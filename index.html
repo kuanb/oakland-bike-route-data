@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Oakland Bike Routes Data - 2022</title>
+<meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no">
+<link href="https://api.mapbox.com/mapbox-gl-js/v2.7.0/mapbox-gl.css" rel="stylesheet">
+<script src="https://api.mapbox.com/mapbox-gl-js/v2.7.0/mapbox-gl.js"></script>
+<style>
+body { margin: 0; padding: 0; }
+#map { position: absolute; top: 0; bottom: 0; width: 100%; }
+
+.stats-bar {
+    background-color: #222;
+    border-radius: 3px;
+    top: 30px;
+    left: 30px;
+    font: 12px/20px 'Helvetica Neue', Arial, Helvetica, sans-serif;
+    padding: 16px 14px;
+    position: absolute;
+    z-index: 1;
+    color: whitesmoke;
+    font-size: 18px;
+}
+
+.legend {
+    background-color: #fff;
+    border-radius: 3px;
+    bottom: 30px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    font: 12px/20px 'Helvetica Neue', Arial, Helvetica, sans-serif;
+    padding: 10px;
+    position: absolute;
+    right: 10px;
+    z-index: 1;
+}
+ 
+.legend h4 {
+    margin: 0 0 10px;
+}
+
+.legend div {
+    border-radius: 6px;
+    cursor: pointer;
+    padding: 4px 8px;
+}
+
+.legend div:hover, .legend .selected {
+    background-color: lightgrey;
+}
+ 
+.legend div span {
+    border-radius: 50%;
+    display: inline-block;
+    height: 10px;
+    margin-right: 5px;
+    width: 10px;
+}
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<div id="bike-legend" class="legend">
+    <h4>Bike Route Classification</h4>
+    <div id="select-0" onclick="filterToClass('0')"><span style="background-color: #a5682a;"></span>Class 0</div>
+    <div id="select-1" onclick="filterToClass('1')"><span style="background-color: #32cd32"></span>Class 1</div>
+    <div id="select-2" onclick="filterToClass('2')"><span style="background-color: #b82be2"></span>Class 2</div>
+    <div id="select-3" onclick="filterToClass('3')"><span style="background-color: #e2b82b"></span>Class 3</div>
+    <div id="select-4" onclick="filterToClass('4')"><span style="background-color: #2b83e2"></span>Class 4</div>
+    <hr>
+    <span style="padding-left:10px;">
+        <a href="https://kuanbutts.com/" style="font-size:small;color:lightgrey;under;text-decoration:none">03/2022 @kuanb</a>
+    </span>
+</div>
+
+<div id="route-miles-stats" class="stats-bar">
+    <span style="border-right-style: dotted; padding-right: 10px;">
+        <span id="existing-miles">0.0</span>mi existing
+    </span>
+    <span style="padding-left: 10px;">
+        <span id="proposed-miles">0.0</span>mi proposed
+    </span>
+</div>
+
+<script>
+    const ROAD_CLASSES = ['0', '1', '2', '3', '4']
+    let OK_TO_FILTER = false;
+    let LOADED_DATA = null;
+	mapboxgl.accessToken = 'pk.eyJ1Ijoia3VhbmJtYiIsImEiOiJja2s4cmlrdHcwcWkyMnZxb211cmNleWNqIn0.zXVchyXMWSrY8j-ju644wA';
+    const map = new mapboxgl.Map({
+        container: 'map', // container ID
+        style: 'mapbox://styles/mapbox/light-v10', // style URL
+        center: [-122.2, 37.8113], // starting position [lng, lat]
+        zoom: 11 // starting zoom
+    });
+
+    function calculateTotalMiles(key, filterString) {
+        let totalDistVisible = 0;
+        const existingLaneMilesVals = LOADED_DATA.features.map(ea => {
+            if (ea.properties.EXISTINGCL[0] == filterString || filterString == "all") {
+                return ea.properties[key]
+            } else {
+                return 0;
+            }
+        });
+        existingLaneMilesVals.map(x => { totalDistVisible+=x });
+        return totalDistVisible.toFixed(2);
+    }
+
+    function setTopStats(filterString) {
+        document.getElementById("existing-miles").innerText = calculateTotalMiles("LANEMILES_", filterString);
+        document.getElementById("proposed-miles").innerText = calculateTotalMiles("LANEMILES1", filterString);
+    }
+
+    function filterToClass(filterString) {
+        if (OK_TO_FILTER) {
+            const showAll = document.getElementById(`select-${filterString}`).classList.contains("selected");
+            if (showAll) {
+                console.log(`Filtering on ${filterString}...`);
+            } else {
+                console.log(`Removing filters, showing all routes...`);
+            }
+            ROAD_CLASSES.forEach(ea => {
+                if (document.getElementById(`select-${ea}`).classList.contains("selected")) {
+                    document.getElementById(`select-${ea}`).classList.remove("selected");
+                }
+                map.setLayoutProperty(
+                    `bikeroutes-layer-${ea}`,
+                    'visibility',
+                    showAll || ea === filterString ? 'visible' : 'none'
+                );
+            });
+            if (!showAll) {
+                document.getElementById(`select-${filterString}`).classList.add("selected");
+            }
+            setTopStats(filterString);
+        }
+    }
+
+    function readGistBikeData(file, callback) {
+        var rawFile = new XMLHttpRequest();
+        rawFile.overrideMimeType("application/json");
+        rawFile.open("GET", file, true);
+        rawFile.onreadystatechange = function() {
+            if (rawFile.readyState === 4 && rawFile.status == "200") {
+                callback(rawFile.responseText);
+            }
+        }
+        rawFile.send(null);
+    }
+
+    // raw json path
+    const rawJsonPath = "https://gist.githubusercontent.com/kuanb/4e4302feb47c8467bd74f9f48d805705/raw/690f738763d9fe5a1b7f5c190fcd686842a77bbe/BikeNetwork_01262022.geojson";
+    map.on('load', () => {
+        readGistBikeData(rawJsonPath, (textRes) => {
+            LOADED_DATA = JSON.parse(textRes);
+            setTopStats("all");
+            console.log(LOADED_DATA);
+        
+            map.addSource('bikeroutes', {
+                type: 'geojson',
+                data: LOADED_DATA
+            });
+            
+            ROAD_CLASSES.forEach(ea => {
+                map.addLayer({
+                    'id': `bikeroutes-layer-${ea}`,
+                    'type': 'line',
+                    'source': 'bikeroutes',
+                    'paint': {
+                        'line-width': 3,
+                        'line-color': [
+                            'match',
+                            ['slice', ['get', 'EXISTINGCL'], 0, 1],
+                            '0', '#a5682a',
+                            '1', '#32cd32',
+                            '2', '#b82be2',
+                            '3', '#e2b82b',
+                            '4', '#2b83e2',
+                            'lightgrey'
+                        ],
+                    },
+                    'filter': ['==', ['slice', ['get', 'EXISTINGCL'], 0, 1], ea]
+                });
+
+                map.on('click', `bikeroutes-layer-${ea}`, (e) => {
+                    const coordinates = e.lngLat;
+                    const props = e.features[0].properties;
+                    let description = "<table><tr><th>Key</th><th>Value</th></tr>"
+                    Object.keys(props).forEach(key => {
+                        description += `<tr><td>${key}</td><td>${props[key]}</td></tr>`;
+                    })
+                    description += "</table>"
+                    new mapboxgl.Popup().setLngLat(coordinates).setHTML(description).addTo(map);
+                });
+
+     
+                // change the cursor to a pointer when the mouse is over layer
+                map.on('mouseenter', `bikeroutes-layer-${ea}`, () => {
+                    map.getCanvas().style.cursor = 'pointer';
+                });
+                 
+                // change it back to a pointer when it leaves
+                map.on('mouseleave', 'bikeroutes-layer', () => {
+                    map.getCanvas().style.cursor = '';
+                });
+            });
+
+            OK_TO_FILTER = true;
+        });
+    });
+</script>
+
+</body>
+</html>
