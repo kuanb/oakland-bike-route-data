@@ -95,10 +95,10 @@ body { margin: 0; padding: 0; }
         zoom: 11 // starting zoom
     });
 
-    function calculateTotalMiles(key, filterString) {
+    function calculateTotalMiles(key, match, filterString) {
         let totalDistVisible = 0;
         const existingLaneMilesVals = LOADED_DATA.features.map(ea => {
-            if (ea.properties.EXISTINGCL[0] == filterString || filterString == "all") {
+            if (ea.properties[match][0] == filterString || filterString == "all") {
                 return ea.properties[key]
             } else {
                 return 0;
@@ -109,8 +109,8 @@ body { margin: 0; padding: 0; }
     }
 
     function setTopStats(filterString) {
-        document.getElementById("existing-miles").innerText = calculateTotalMiles("LANEMILES_", filterString);
-        document.getElementById("proposed-miles").innerText = calculateTotalMiles("LANEMILES1", filterString);
+        document.getElementById("existing-miles").innerText = calculateTotalMiles("LANEMILES_", "EXISTINGCL", filterString);
+        document.getElementById("proposed-miles").innerText = calculateTotalMiles("LANEMILES1", "PROPOSEDCL", filterString);
     }
 
     function filterToClass(filterString) {
@@ -133,8 +133,10 @@ body { margin: 0; padding: 0; }
             });
             if (!showAll) {
                 document.getElementById(`select-${filterString}`).classList.add("selected");
+                setTopStats(filterString);
+            } else {
+                setTopStats("all");
             }
-            setTopStats(filterString);
         }
     }
 
