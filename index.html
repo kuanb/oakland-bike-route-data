@@ -36,7 +36,13 @@ body { margin: 0; padding: 0; }
 }
  
 .legend h4 {
+    padding-top: 0px;
     margin: 0 0 10px;
+}
+ 
+.legend h3 {
+    padding-bottom: 0px;
+    margin-bottom: 0px;
 }
 
 .legend div {
@@ -62,8 +68,9 @@ body { margin: 0; padding: 0; }
 <div id="map"></div>
 
 <div id="bike-legend" class="legend">
-    <h4>Bike Route Classification</h4>
-    <div id="select-0" onclick="filterToClass('0')"><span style="background-color: #a5682a;"></span>Class 0</div>
+    <h3>Bike Routes 2022</h3>
+    <h4>Existing Classification</h4>
+    <div id="select-0" onclick="filterToClass('all')"><span style="background-color: #a5682a;"></span>Proposed</div>
     <div id="select-1" onclick="filterToClass('1')"><span style="background-color: #32cd32"></span>Class 1</div>
     <div id="select-2" onclick="filterToClass('2')"><span style="background-color: #b82be2"></span>Class 2</div>
     <div id="select-3" onclick="filterToClass('3')"><span style="background-color: #e2b82b"></span>Class 3</div>
@@ -84,7 +91,8 @@ body { margin: 0; padding: 0; }
 </div>
 
 <script>
-    const ROAD_CLASSES = ['0', '1', '2', '3', '4']
+    const ROAD_CLASSES = ['0', '1', '2', '3', '4'];
+    let LAYER_NAMES = [];
     let OK_TO_FILTER = false;
     let LOADED_DATA = null;
 	mapboxgl.accessToken = 'pk.eyJ1Ijoia3VhbmJtYiIsImEiOiJja2s4cmlrdHcwcWkyMnZxb211cmNleWNqIn0.zXVchyXMWSrY8j-ju644wA';
@@ -115,20 +123,23 @@ body { margin: 0; padding: 0; }
 
     function filterToClass(filterString) {
         if (OK_TO_FILTER) {
-            const showAll = document.getElementById(`select-${filterString}`).classList.contains("selected");
+            const showAll = filterString == "all" || document.getElementById(`select-${filterString}`).classList.contains("selected");
             if (showAll) {
-                console.log(`Filtering on ${filterString}...`);
-            } else {
                 console.log(`Removing filters, showing all routes...`);
+            } else {
+                console.log(`Filtering on ${filterString}...`);
             }
             ROAD_CLASSES.forEach(ea => {
                 if (document.getElementById(`select-${ea}`).classList.contains("selected")) {
                     document.getElementById(`select-${ea}`).classList.remove("selected");
                 }
+            });
+
+            LAYER_NAMES.forEach(layerId => {
                 map.setLayoutProperty(
-                    `bikeroutes-layer-${ea}`,
+                    layerId,
                     'visibility',
-                    showAll || ea === filterString ? 'visible' : 'none'
+                    showAll || layerId.includes(filterString) ? 'visible' : 'none'
                 );
             });
             if (!showAll) {
@@ -164,10 +175,29 @@ body { margin: 0; padding: 0; }
                 type: 'geojson',
                 data: LOADED_DATA
             });
-            
+
+            const layerIds = [];
             ROAD_CLASSES.forEach(ea => {
+                if (ea == "0") {
+                    ROAD_CLASSES.forEach(proposed => {
+                        layerIds.push([
+                            `bikeroutes-layer-${ea}-${proposed}`,
+                            'PROPOSEDCL',
+                            proposed
+                        ]);
+                    });
+                } else {
+                    layerIds.push([`bikeroutes-layer-${ea}`, 'EXISTINGCL', ea]);
+                }
+            });
+            
+            layerIds.forEach(layerParams => {
+                const layerId = layerParams[0];
+                LAYER_NAMES.push(layerId);
+                const filterCol = layerParams[1];
+                const filterColPattern = layerParams[2];
                 map.addLayer({
-                    'id': `bikeroutes-layer-${ea}`,
+                    'id': layerId,
                     'type': 'line',
                     'source': 'bikeroutes',
                     'paint': {
@@ -183,10 +213,10 @@ body { margin: 0; padding: 0; }
                             'lightgrey'
                         ],
                     },
-                    'filter': ['==', ['slice', ['get', 'EXISTINGCL'], 0, 1], ea]
+                    'filter': ['==', ['slice', ['get', filterCol], 0, 1], filterColPattern]
                 });
 
-                map.on('click', `bikeroutes-layer-${ea}`, (e) => {
+                map.on('click', layerId, (e) => {
                     const coordinates = e.lngLat;
                     const props = e.features[0].properties;
                     let description = "<table><tr><th>Key</th><th>Value</th></tr>"
@@ -199,12 +229,12 @@ body { margin: 0; padding: 0; }
 
      
                 // change the cursor to a pointer when the mouse is over layer
-                map.on('mouseenter', `bikeroutes-layer-${ea}`, () => {
+                map.on('mouseenter', layerId, () => {
                     map.getCanvas().style.cursor = 'pointer';
                 });
                  
                 // change it back to a pointer when it leaves
-                map.on('mouseleave', 'bikeroutes-layer', () => {
+                map.on('mouseleave', layerId, () => {
                     map.getCanvas().style.cursor = '';
                 });
             });
